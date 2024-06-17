@@ -1,24 +1,22 @@
 import numpy as np
 from Power_RRU_Model import Cell_Power
 
-def Mesh_Power_RRU(dict_onoff, Cell_Info):
-    print('开始计算小区能耗：')
+def Mesh_Power_RRU(dict_onoff, Cell_Info, net):
     stu = ['Sleep', 'Active']
     for day in dict_onoff:
         for ts in dict_onoff[day]:
             for mesh in dict_onoff[day][ts]:
                 for cell in dict_onoff[day][ts][mesh]:
-                    dict_onoff[day][ts][mesh][cell]['Power_RRU'] = Cell_Power(cell,
-                            stu[dict_onoff[day][ts][mesh][cell]['Status']],
-                            dict_onoff[day][ts][mesh][cell]['Traffic'],
-                            Cell_Info)
-        print('第{}天计算完成'.format(day))
+                    if cell in Cell_Info[net]:
+                        dict_onoff[day][ts][mesh][cell]['Power_RRU'] = Cell_Power(cell,
+                                stu[dict_onoff[day][ts][mesh][cell]['Status']],
+                                dict_onoff[day][ts][mesh][cell]['Traffic'],
+                                Cell_Info)
     return dict_onoff
 
 
 def ActiveBS(onoff, BSandCell):
     onoff_BS = {}
-    print('开始判断基站启停')
     for BS in BSandCell:
          onoff_BS[BS] = np.zeros(336)
     for day in onoff:
@@ -27,12 +25,10 @@ def ActiveBS(onoff, BSandCell):
                 for cell in onoff[day][ts][mesh]:
                     if dict_onoff[day][ts][mesh][cell]['Status'] == 1:
                         onoff_BS[cell.split('-')[2]][day*48+ts] = 1
-        print('第{}天判断完成'.format(day))
     return onoff_BS
 
 
-def Power_get(dict_PeAs, BBU, onf_BS):
-    print('开始获取基站能耗')
+def Power_get(dict_PeAs, BBU, onf_BS, BSandCell):
     Pe = {}
     for bs in BBU:
         Pe[bs] = BBU[bs]
@@ -41,19 +37,29 @@ def Power_get(dict_PeAs, BBU, onf_BS):
             for mesh in dict_PeAs[day][ts]:
                 for cell in dict_PeAs[day][ts][mesh]:
                     bs = cell.split('-')[2]
-                    Pe[bs][day*48+ts] += dict_PeAs[day][ts][mesh][cell]['Power_RRU']
-        print('第{}天获取完成'.format(day))
+                    if cell in BSandCell[bs]:
+                        try:
+                            Pe[bs][day*48+ts] += dict_PeAs[day][ts][mesh][cell]['Power_RRU']
+                        except:
+                            print(bs, cell, bs in Pe)
     for bs in Pe:
         Pe[bs] = Pe[bs] * onf_BS[bs]
     return Pe
 
-net = '4G'
+net = '5G'
 dict_onoff = np.load(f'data/Onoff_Traffic_arrange_TCN_{net}.npy', allow_pickle=True).item()
-BSandCell = np.load(f'data/BSandCell_{net}.npy', allow_pickle=True).item()
-BBU = np.load('./data/BBU_4G.npy', allow_pickle=True).item()
+Cell_Info = np.load(f'data/Cell_Info.npy', allow_pickle=True).item()
+Traffic = np.load(f'Traffic_Prediction_Model/data/Traffic_{net}.npy', allow_pickle=True).item()
+BSandCell = {}
+for cell in Traffic:
+    bs = cell.split('-')[2]
+    if bs not in BSandCell:
+        BSandCell[bs] = []
+    BSandCell[bs].append(cell)
+BBU = np.load(f'data/BBU_{net}.npy', allow_pickle=True).item()
 onoff_BS = ActiveBS(dict_onoff, BSandCell)
-dict_onoff_PeAs = Mesh_Power_RRU(dict_onoff)
-Pe = Power_get(dict_onoff_PeAs, BBU, onoff_BS)
+dict_onoff_PeAs = Mesh_Power_RRU(dict_onoff, Cell_Info, net)
+Pe = Power_get(dict_onoff_PeAs, BBU, onoff_BS, BSandCell)
 
 EE_Mesh = {}
 for day in dict_onoff_PeAs:
@@ -66,7 +72,11 @@ for day in dict_onoff_PeAs:
             for cell in dict_onoff_PeAs[day][ts][mesh]:
                 traffic += dict_onoff_PeAs[day][ts][mesh][cell]['Traffic']
                 power += dict_onoff_PeAs[day][ts][mesh][cell]['Power_RRU']
-            EE_Mesh[day][ts][mesh] = traffic/power
+            if traffic == 0:
+                EE_Mesh[day][ts][mesh] = 0
+            else:
+                assert power > 0
+                EE_Mesh[day][ts][mesh] = traffic/power
 
 np.save(f'data/Onoff_{net}BS_TCN.npy', onoff_BS)
 np.save(f'data/Onoff_Power_arrange_TCN_{net}.npy', dict_onoff_PeAs)

@@ -108,8 +108,8 @@ def dataset_generator(Cell_list, Traffic_dict, Traffic_all_cell, if_shuffle=Fals
 
 
 
-def final_model_train(Input_dict, TCNModel, num_blocks=7):
-    epoch_max = 100
+def final_model_train(Input_dict, TCNModel, num_blocks=7, epoch_max = 100):
+    
     drop_out = 0.1
     batch_size = 64
     learning_rate = 0.001
@@ -152,7 +152,7 @@ def final_model_train(Input_dict, TCNModel, num_blocks=7):
     validation_loss = []
     testing_loss = []
     n_input = 0
-    for epoch in tqdm(range(epoch_max)):
+    for epoch in range(epoch_max):
         for batch_idx in range(n_train // batch_size + 1):
 
             x_train_, y_train_ = Shuffle(
@@ -208,7 +208,7 @@ def final_model_train(Input_dict, TCNModel, num_blocks=7):
 
 ######################## Generate the input #############################
 
-net = '4G'
+net = '5G'
 if_shuffle = True
 
 Traffic_4G = np.load(r'data/Traffic_4G.npy', allow_pickle=True).item()
@@ -234,11 +234,12 @@ np.save(f'data/Traffic_Input_{net}.npy', Traffic_Input)
 
 ######################## Train the model and get the prediction #############################
 num_blocks = 7
+epoch_max = 10
 # os.environ["CUDA_VISIBLE_DEVICES"] = use_gpu(0.85)  # Choose device
 Traffic = np.load(f'data/Traffic_{net}.npy', allow_pickle=True).item()
 T_pred = {}
 for cell in Traffic_Input:
-    Model = final_model_train(Traffic_Input[cell], TCN, num_blocks)
+    Model = final_model_train(Traffic_Input[cell], TCN, num_blocks, epoch_max)
     x_input = torch.tensor(Traffic_Input[cell]['X']['pred'])
 
     prediction = np.zeros(336)

@@ -1,14 +1,24 @@
 import numpy as np
 from Power_RRU_Model import Cell_Power
 
-Mesh = np.load('data/Mesh_4G.npy', allow_pickle=True).item()
+Mesh = np.load('data/Mesh.npy', allow_pickle=True).item()
 Cell_Equal = np.load('data/Cell_equlist.npy', allow_pickle=True).item()
 Cell_Info = np.load(f'data/Cell_Info.npy', allow_pickle=True).item()
-BBU4 = np.load('./data/BBU_4G.npy', allow_pickle=True).item()
-BBU5 = np.load('./data/BBU_5G.npy', allow_pickle=True).item()
-BBU = dict(BBU4, **BBU5)
-BSandCell_4G = np.load('./data/BSandCell_4G.npy', allow_pickle=True).item()
-BSandCell_5G = np.load('./data/BSandCell_5G.npy', allow_pickle=True).item()
+BBU_4G = np.load('./data/BBU_4G.npy', allow_pickle=True).item()
+BBU_5G = np.load('./data/BBU_5G.npy', allow_pickle=True).item()
+BBU = dict(BBU_4G, **BBU_5G)
+BSandCell_4G = {}
+BSandCell_5G = {}
+for cell in Cell_Info['4G']:
+    bs = cell.split('-')[2]
+    if bs not in BSandCell_4G:
+        BSandCell_4G[bs] = []
+    BSandCell_4G[bs].append(cell)
+for cell in Cell_Info['5G']:
+    bs = cell.split('-')[2]
+    if bs not in BSandCell_5G:
+        BSandCell_5G[bs] = []
+    BSandCell_5G[bs].append(cell)
 Cell_Mesh = {}
 for c in Cell_Info['4G']:
     for g in Mesh:
@@ -86,7 +96,15 @@ def Power_get(dict_PeAs, U, onf_BS, net):
     return Pe
 
 Onoff = np.load('data/Onoff_Power_arrange_TCN_4G.npy', allow_pickle=True).item()
-Traffic_5G = np.load('data/Traffic_5G.npy', allow_pickle=True).item()
+Onoff_5G = np.load('data/Onoff_Traffic_arrange_TCN_5G.npy', allow_pickle=True).item()
+Traffic_5G = {}
+for day in Onoff_5G:
+    for ts in Onoff_5G[day]:
+        for mesh in Onoff_5G[day][ts]:
+            for cell in Onoff_5G[day][ts][mesh]:
+                if cell not in Traffic_5G:
+                    Traffic_5G[cell] = np.zeros(336)
+                Traffic_5G[cell][day*48+ts] = Onoff_5G[day][ts][mesh][cell]['Traffic']
 EE_Mesh = np.load(f'data/Mesh_Energy_Efficiency_4G.npy', allow_pickle=True).item()
 
 Cell5GtoMesh = {}
@@ -123,18 +141,19 @@ for day in Onoff:
                     for i in range(mesh_equ_sorted.shape[0]):
                         mesh = mesh_equ_sorted[i][0]
                         for c4 in Mesh[mesh]:
-                            Cell5GtoMesh[day][ts][c5].append(mesh)
-                            if Onoff_5G[day][ts][c5]['Traffic'] > (Cell_Info['4G'][c4]['Capacity'] -
-                                                                Onoff[day][ts][mesh][c4]['Traffic']):
-                                Onoff_5G[day][ts][c5]['Traffic'] -= Cell_Info['4G'][c4]['Capacity'] - \
-                                                                    Onoff[day][ts][mesh][c4]['Traffic']
-                                Onoff[day][ts][mesh][c4]['Traffic'] = Cell_Info['4G'][c4]['Capacity']
-                                Onoff[day][ts][mesh][c4]['Status'] = 1
-                            else:
-                                Onoff[day][ts][mesh][c4]['Traffic'] += Onoff_5G[day][ts][c5]['Traffic']
-                                Onoff[day][ts][mesh][c4]['Status'] = 1
-                                Onoff_5G[day][ts][c5]['Traffic'] = 0
-                                break
+                            if cell in Cell_Info['4G']:
+                                Cell5GtoMesh[day][ts][c5].append(mesh)
+                                if Onoff_5G[day][ts][c5]['Traffic'] > (Cell_Info['4G'][c4]['Capacity'] -
+                                                                    Onoff[day][ts][mesh][c4]['Traffic']):
+                                    Onoff_5G[day][ts][c5]['Traffic'] -= Cell_Info['4G'][c4]['Capacity'] - \
+                                                                        Onoff[day][ts][mesh][c4]['Traffic']
+                                    Onoff[day][ts][mesh][c4]['Traffic'] = Cell_Info['4G'][c4]['Capacity']
+                                    Onoff[day][ts][mesh][c4]['Status'] = 1
+                                else:
+                                    Onoff[day][ts][mesh][c4]['Traffic'] += Onoff_5G[day][ts][c5]['Traffic']
+                                    Onoff[day][ts][mesh][c4]['Status'] = 1
+                                    Onoff_5G[day][ts][c5]['Traffic'] = 0
+                                    break
                         if Onoff_5G[day][ts][c5]['Traffic'] == 0:
                             break
                     if Onoff_5G[day][ts][c5]['Traffic'] > 0:
@@ -149,10 +168,10 @@ np.save(f'data/Onoff_4GPower_AfterOffloading5G.npy', Onoff)
 
 Onoff_Power_4G = Mesh_Power_RRU(Onoff, '4G')
 onoff_BS_4G = ActiveBS(Onoff_Power_4G, BSandCell_4G, '4G')
-Pe_4G = Power_get(Onoff_Power_4G, BBU4, onoff_BS_4G, '4G')
+Pe_4G = Power_get(Onoff_Power_4G, BBU_4G, onoff_BS_4G, '4G')
 Onoff_Power_5G = Mesh_Power_RRU(Onoff_5G, '5G')
 onoff_BS_5G = ActiveBS(Onoff_Power_5G, BSandCell_5G, '5G')
-Pe_5G = Power_get(Onoff_Power_5G, BBU5, onoff_BS_5G, '5G')
+Pe_5G = Power_get(Onoff_Power_5G, BBU_5G, onoff_BS_5G, '5G')
 n = 0
 for bs in onoff_BS_5G:
     if onoff_BS_5G[bs][0] == 0:

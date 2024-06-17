@@ -1,10 +1,10 @@
 import numpy as np
 
-net = '4G'
+net = '5G'
 Cell_Info = np.load(f'data/Cell_Info.npy', allow_pickle=True).item()
-Traffic = np.load(f'data/Traffic_{net}.npy', allow_pickle=True).item()
+Traffic = np.load(f'Traffic_Prediction_Model/data/Traffic_{net}.npy', allow_pickle=True).item()
 Traffic_pred = np.load(f'Traffic_Prediction_Model/data/Traffic_pred_{net}.npy', allow_pickle=True).item()
-Mesh = np.load(f'data/Mesh_{net}.npy', allow_pickle=True).item()
+Mesh = np.load(f'data/Mesh.npy', allow_pickle=True).item()
 EnergyEfficiency = np.load(f'data/Cell_Energy_Efficiency_{net}.npy', allow_pickle=True).item()
 
 def cell_arrange(Cell_Info, Mesh, EE, net):
@@ -15,13 +15,17 @@ def cell_arrange(Cell_Info, Mesh, EE, net):
         list_cell_arr = []
         list_capa_arr = []
         while list_cell != []:
-            max = 0
+            max_ = -100
             cell_max = ''
+            is_null = True
             for x in list_cell:
                 if x in Cell_Info[net]:
-                    if EE[x] > max:
-                        max = EE[x]
+                    is_null = False
+                    if EE[x] >= max_:
+                        max_ = EE[x]
                         cell_max = x
+            if is_null:
+                break
             list_cell_arr.append(cell_max)
             list_capa_arr.append(Cell_Info[net][cell_max]['Capacity'])
             list_cell.remove(cell_max)
@@ -29,7 +33,7 @@ def cell_arrange(Cell_Info, Mesh, EE, net):
         dict_arr[i]['Capacity'] = list_capa_arr
     return dict_arr
 
-def onoff(dict_cell, dict_EV, T):
+def onoff(dict_cell, dict_EV, T, Cell_Info, net):
     dict_onoff = {}
     for day in range(7):
         dict1 = {}
@@ -55,10 +59,11 @@ def onoff(dict_cell, dict_EV, T):
     CS2 = {}
     for g in Mesh:
         for cell in Mesh[g]:
-            CS2[cell] = []
-            for day in dict_onoff:
-                for ts in dict_onoff[day]:
-                    CS2[cell].append(C[cell]['Capacity'] * dict_onoff[day][ts][g][cell]['Status'])
+            if cell in Cell_Info[net]:
+                CS2[cell] = []
+                for day in dict_onoff:
+                    for ts in dict_onoff[day]:
+                        CS2[cell].append(Cell_Info[net][cell]['Capacity'] * dict_onoff[day][ts][g][cell]['Status'])
 
     for day in dict_onoff:
         for ts in dict_onoff[day]:
@@ -81,7 +86,7 @@ def onoff(dict_cell, dict_EV, T):
                             raise Exception(f"Traffic Transfer Error! {cell}, {Tm}, {dict_onoff[day][ts][mesh][cell]['Traffic']}")
     return CS2, dict_onoff
 
-dict_arr = cell_arrange(Cell_Info, Mesh, EnergyEfficiency)
+dict_arr = cell_arrange(Cell_Info, Mesh, EnergyEfficiency, net)
 TT = {}
 for day in range(7):
     TT[day] = {}
@@ -90,6 +95,7 @@ for day in range(7):
         for ts in range(48):
             TT[day][mesh][ts] = 0
             for cell in Mesh[mesh]:
-                TT[day][mesh][ts] += Traffic_pred[cell][day*48+ts]
-CS2, dict_onoff = onoff(dict_arr, TT, Traffic)
+                if cell in Traffic_pred:
+                    TT[day][mesh][ts] += Traffic_pred[cell][day*48+ts]
+CS2, dict_onoff = onoff(dict_arr, TT, Traffic, Cell_Info, net)
 np.save(f'data/Onoff_Traffic_arrange_TCN_{net}.npy', dict_onoff)
