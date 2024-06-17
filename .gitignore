@@ -3,3 +3,5 @@ Traffic_Prediction_Model/data/Traffic_Input_5G.npy
 Traffic_Prediction_Model/data/Traffic_pred_4G.npy
 Traffic_Prediction_Model/data/Traffic_pred_5G.npy
 /Traffic_Prediction_Model/try.ipynb
+# Traffic_Prediction_Model/libs/__pycache__
+# Traffic_Prediction_Model/model/__pycache__
